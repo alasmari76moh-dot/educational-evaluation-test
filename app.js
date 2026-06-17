@@ -1,5 +1,4 @@
-const LS_KEY = 'exam_progress_v1';
-const OPTION_LABELS = { A: 'أ', B: 'ب', C: 'ج', D: 'د' };
+const LS_KEY = 'exam_progress_v2';
 
 const state = {
   currentIndex: 0,
@@ -91,25 +90,25 @@ function renderQuestion() {
 
   container.innerHTML = `
     <div class="question-meta">
-      <span class="question-topic">${escapeHtml(q.topic || '')}</span>
+      <span class="question-topic">${escapeHtml(q.domain || '')}</span>
       <span class="question-difficulty">${escapeHtml(q.difficulty || '')}</span>
     </div>
-    <h2 class="question-text">${q.id}. ${escapeHtml(q.question)}</h2>
+    <h2 class="question-text">${q.id}. ${escapeHtml(q.stem)}</h2>
     <div class="options-list">
-      ${Object.entries(q.options)
+      ${q.options
         .map(
-          ([key, text]) => `
-        <label class="option-label" for="opt-${key}">
+          (opt) => `
+        <label class="option-label" for="opt-${opt.label}">
           <input
             type="radio"
             name="answer"
-            id="opt-${key}"
+            id="opt-${opt.label}"
             class="option-radio"
-            value="${key}"
-            ${selected === key ? 'checked' : ''}
+            value="${opt.label}"
+            ${selected === opt.label ? 'checked' : ''}
           />
-          <span class="option-letter">${OPTION_LABELS[key]}</span>
-          <span class="option-text">${escapeHtml(text)}</span>
+          <span class="option-letter">${escapeHtml(opt.label)}</span>
+          <span class="option-text">${escapeHtml(opt.text)}</span>
         </label>
       `
         )
@@ -239,7 +238,7 @@ function restartExam() {
 function computeScore() {
   let correct = 0;
   questions.forEach((q) => {
-    if (state.answers[q.id] === q.answer) correct++;
+    if (state.answers[q.id] === q.correct) correct++;
   });
   const percentage = Math.round((correct / totalQuestions) * 100);
   return { correct, percentage };
@@ -278,7 +277,7 @@ function renderDomainTable() {
   const rows = domains.map((d) => {
     const qs = questions.filter((q) => q.id >= d.start && q.id <= d.end);
     const total = qs.length;
-    const correct = qs.filter((q) => state.answers[q.id] === q.answer).length;
+    const correct = qs.filter((q) => state.answers[q.id] === q.correct).length;
     const pct = total ? Math.round((correct / total) * 100) : 0;
     return { ...d, total, correct, pct };
   });
@@ -309,21 +308,26 @@ function renderDomainTable() {
   `;
 }
 
+function getOptionText(q, label) {
+  const opt = q.options.find((o) => o.label === label);
+  return opt ? opt.text : '';
+}
+
 function renderReview() {
   const list = document.getElementById('review-list');
   list.innerHTML = questions
     .map((q) => {
       const userAnswer = state.answers[q.id] || '';
-      const isCorrect = userAnswer === q.answer;
+      const isCorrect = userAnswer === q.correct;
       const statusText = isCorrect ? 'صحيحة' : 'خاطئة';
       const statusClass = isCorrect ? 'correct' : 'incorrect';
-      const userText = userAnswer ? `${OPTION_LABELS[userAnswer]} - ${escapeHtml(q.options[userAnswer])}` : 'لم يتم الإجابة';
-      const correctText = `${OPTION_LABELS[q.answer]} - ${escapeHtml(q.options[q.answer])}`;
+      const userText = userAnswer ? `${escapeHtml(userAnswer)} - ${escapeHtml(getOptionText(q, userAnswer))}` : 'لم يتم الإجابة';
+      const correctText = `${escapeHtml(q.correct)} - ${escapeHtml(getOptionText(q, q.correct))}`;
 
       return `
         <div class="review-item ${statusClass}">
           <div class="review-header">
-            <span class="review-question">${q.id}. ${escapeHtml(q.question)}</span>
+            <span class="review-question">${q.id}. ${escapeHtml(q.stem)}</span>
             <span class="review-status ${statusClass}">${statusText}</span>
           </div>
           <div class="review-answer-row">
