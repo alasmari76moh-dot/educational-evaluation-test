@@ -89,10 +89,6 @@ function renderQuestion() {
   const isLast = state.currentIndex === totalQuestions - 1;
 
   container.innerHTML = `
-    <div class="question-meta">
-      <span class="question-topic">${escapeHtml(q.domain || '')}</span>
-      <span class="question-difficulty">${escapeHtml(q.difficulty || '')}</span>
-    </div>
     <h2 class="question-text">${q.id}. ${escapeHtml(q.stem)}</h2>
     <div class="options-list">
       ${q.options
