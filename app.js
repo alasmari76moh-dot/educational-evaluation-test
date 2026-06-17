@@ -18,10 +18,6 @@ const domains = [
   { name: 'مؤشرات الأداء والنماذج والتصميم و CIPP', start: 71, end: 100 },
 ];
 
-function getDomain(id) {
-  return domains.find((d) => id >= d.start && id <= d.end) || { name: 'عام' };
-}
-
 function init() {
   loadProgress();
   bindEvents();
@@ -66,10 +62,6 @@ function clearProgress() {
 }
 
 function bindEvents() {
-  document.getElementById('btn-prev').addEventListener('click', goPrev);
-  document.getElementById('btn-next').addEventListener('click', goNext);
-  document.getElementById('btn-review-unanswered').addEventListener('click', jumpToFirstUnanswered);
-  document.getElementById('btn-submit').addEventListener('click', confirmSubmit);
   document.getElementById('btn-restart').addEventListener('click', restartExam);
 }
 
@@ -85,20 +77,17 @@ function render() {
 function showExam() {
   document.getElementById('exam-screen').classList.remove('hidden');
   document.getElementById('results-screen').classList.add('hidden');
-  document.getElementById('exam-actions').classList.remove('hidden');
   document.getElementById('results-actions').classList.add('hidden');
   document.getElementById('progress-area').classList.remove('hidden');
 
   renderQuestion();
-  renderQuestionGrid();
-  updateNavButtons();
 }
 
 function renderQuestion() {
   const q = questions[state.currentIndex];
   const container = document.getElementById('question-card');
-
   const selected = state.answers[q.id] || '';
+  const isLast = state.currentIndex === totalQuestions - 1;
 
   container.innerHTML = `
     <div class="question-meta">
@@ -126,6 +115,11 @@ function renderQuestion() {
         )
         .join('')}
     </div>
+    <div class="nav-buttons">
+      <button class="btn btn-secondary" id="btn-prev" type="button">السابق</button>
+      <button class="btn btn-primary" id="btn-next" type="button">${isLast ? 'السؤال الأخير' : 'التالي'}</button>
+      <button class="btn btn-danger" id="btn-submit" type="button">تسليم الاختبار</button>
+    </div>
   `;
 
   container.querySelectorAll('input[name="answer"]').forEach((radio) => {
@@ -133,53 +127,26 @@ function renderQuestion() {
       state.answers[q.id] = e.target.value;
       saveProgress();
       updateProgress();
-      updateGridItem(q.id);
-    });
-  });
-}
-
-function renderQuestionGrid() {
-  const list = document.getElementById('question-grid');
-  list.innerHTML = `
-    <h3 class="question-grid-title">قائمة الأسئلة</h3>
-    <div class="question-grid-list">
-      ${questions
-        .map((q, idx) => {
-          const answered = !!state.answers[q.id];
-          const current = idx === state.currentIndex ? 'current' : '';
-          const status = answered ? 'answered' : 'unanswered';
-          return `<button class="grid-item ${status} ${current}" data-index="${idx}" type="button" aria-label="سؤال ${q.id}">${q.id}</button>`;
-        })
-        .join('')}
-    </div>
-  `;
-
-  list.querySelectorAll('.grid-item').forEach((btn) => {
-    btn.addEventListener('click', () => {
-      state.currentIndex = parseInt(btn.dataset.index, 10);
-      renderQuestion();
-      renderQuestionGrid();
       updateNavButtons();
-      saveProgress();
     });
   });
-}
 
-function updateGridItem(qid) {
-  const idx = questions.findIndex((q) => q.id === qid);
-  if (idx === -1) return;
-  const btn = document.querySelector(`.grid-item[data-index="${idx}"]`);
-  if (!btn) return;
-  btn.classList.remove('unanswered');
-  btn.classList.add('answered');
+  document.getElementById('btn-prev').addEventListener('click', goPrev);
+  document.getElementById('btn-next').addEventListener('click', goNext);
+  document.getElementById('btn-submit').addEventListener('click', confirmSubmit);
+
+  updateNavButtons();
 }
 
 function updateNavButtons() {
+  const q = questions[state.currentIndex];
   const btnPrev = document.getElementById('btn-prev');
   const btnNext = document.getElementById('btn-next');
 
-  btnPrev.disabled = state.currentIndex === 0;
-  btnNext.textContent = state.currentIndex === totalQuestions - 1 ? 'السؤال الأخير' : 'التالي';
+  if (btnPrev) btnPrev.disabled = state.currentIndex === 0;
+  if (btnNext) {
+    btnNext.disabled = state.currentIndex === totalQuestions - 1;
+  }
 }
 
 function updateProgress() {
@@ -194,35 +161,29 @@ function goPrev() {
   if (state.currentIndex > 0) {
     state.currentIndex--;
     renderQuestion();
-    renderQuestionGrid();
-    updateNavButtons();
     saveProgress();
   }
 }
 
 function goNext() {
+  const q = questions[state.currentIndex];
+
+  if (!state.answers[q.id]) {
+    showModal('تنبيه', 'يجب اختيار إجابة قبل الانتقال للسؤال التالي.', [
+      { text: 'موافق', class: 'btn btn-primary', action: closeModal },
+    ]);
+    return;
+  }
+
   if (state.currentIndex < totalQuestions - 1) {
     state.currentIndex++;
     renderQuestion();
-    renderQuestionGrid();
-    updateNavButtons();
     saveProgress();
   }
 }
 
-function jumpToFirstUnanswered() {
-  const first = questions.findIndex((q) => !state.answers[q.id]);
-  if (first !== -1) {
-    state.currentIndex = first;
-    renderQuestion();
-    renderQuestionGrid();
-    updateNavButtons();
-    saveProgress();
-  } else {
-    showModal('جميع الأسئلة مجابة', 'لقد أجبت على جميع الأسئلة. يمكنك تسليم الاختبار الآن.', [
-      { text: 'موافق', class: 'btn btn-primary', action: closeModal },
-    ]);
-  }
+function findFirstUnanswered() {
+  return questions.findIndex((q) => !state.answers[q.id]);
 }
 
 function confirmSubmit() {
@@ -230,13 +191,16 @@ function confirmSubmit() {
   const unanswered = totalQuestions - answeredCount;
 
   if (unanswered > 0) {
+    const first = findFirstUnanswered();
+    if (first !== -1) {
+      state.currentIndex = first;
+      renderQuestion();
+      saveProgress();
+    }
     showModal(
-      'تأكيد التسليم',
-      `لم تجب بعد على ${unanswered} سؤال. هل تريد التسليم على أي حال؟`,
-      [
-        { text: 'إلغاء', class: 'btn btn-secondary', action: closeModal },
-        { text: 'تسليم الاختبار', class: 'btn btn-danger', action: submitExam },
-      ]
+      'تنبيه',
+      'لم تكتمل جميع الإجابات. الرجاء إكمال الأسئلة المتبقية.',
+      [{ text: 'موافق', class: 'btn btn-primary', action: closeModal }]
     );
   } else {
     submitExam();
@@ -292,7 +256,6 @@ function getGrade(percentage) {
 function showResults() {
   document.getElementById('exam-screen').classList.add('hidden');
   document.getElementById('results-screen').classList.remove('hidden');
-  document.getElementById('exam-actions').classList.add('hidden');
   document.getElementById('results-actions').classList.remove('hidden');
   document.getElementById('progress-area').classList.add('hidden');
 
@@ -307,7 +270,7 @@ function showResults() {
     <span class="grade-badge ${grade.class}">${grade.label}</span>
   `;
 
-  renderDomainTable(correct);
+  renderDomainTable();
   renderReview();
 }
 
