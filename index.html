@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>اختبار شامل في التقويم التربوي والمؤسسي والبرامجي</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="page-wrapper">
+    <header class="app-header">
+      <h1 class="exam-title">اختبار شامل في التقويم التربوي والمؤسسي والبرامجي</h1>
+      <div class="progress-area" id="progress-area">
+        <div class="progress-info">
+          <span id="progress-text">تمت الإجابة على 0 من 100</span>
+          <span id="progress-percent">0%</span>
+        </div>
+        <div class="progress-bar">
+          <div class="progress-fill" id="progress-fill" style="width: 0%"></div>
+        </div>
+      </div>
+    </header>
+
+    <main class="app-main" id="app-main">
+      <!-- Exam screen -->
+      <section class="exam-screen" id="exam-screen">
+        <div class="question-card" id="question-card">
+          <!-- injected by JS -->
+        </div>
+
+        <div class="question-grid" id="question-grid">
+          <!-- injected by JS -->
+        </div>
+      </section>
+
+      <!-- Results screen -->
+      <section class="results-screen hidden" id="results-screen">
+        <div class="score-card" id="score-card">
+          <!-- injected by JS -->
+        </div>
+
+        <div class="domain-table-wrapper">
+          <h2>تحليل الأداء حسب المجالات</h2>
+          <table class="domain-table" id="domain-table">
+            <!-- injected by JS -->
+          </table>
+        </div>
+
+        <div class="review-wrapper">
+          <h2>مراجعة الإجابات</h2>
+          <div class="review-list" id="review-list">
+            <!-- injected by JS -->
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="app-footer" id="app-footer">
+      <div class="exam-actions" id="exam-actions">
+        <button class="btn btn-secondary" id="btn-prev" type="button">السابق</button>
+        <button class="btn btn-secondary" id="btn-review-unanswered" type="button">مراجعة الأسئلة غير المجابة</button>
+        <button class="btn btn-primary" id="btn-next" type="button">التالي</button>
+        <button class="btn btn-danger" id="btn-submit" type="button">تسليم الاختبار</button>
+      </div>
+      <div class="results-actions hidden" id="results-actions">
+        <button class="btn btn-primary" id="btn-restart" type="button">إعادة الاختبار</button>
+      </div>
+    </footer>
+  </div>
+
+  <script src="exam-data.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

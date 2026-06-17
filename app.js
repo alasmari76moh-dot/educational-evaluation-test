@@ -1,0 +1,431 @@
+const LS_KEY = 'exam_progress_v1';
+const OPTION_LABELS = { A: 'أ', B: 'ب', C: 'ج', D: 'د' };
+
+const state = {
+  currentIndex: 0,
+  answers: {}, // question id -> option letter
+  submitted: false,
+};
+
+const questions = EXAM_DATA.questions || [];
+const totalQuestions = questions.length;
+
+const domains = [
+  { name: 'تعريفات التقويم وأنماطه', start: 1, end: 20 },
+  { name: 'المعايير والأدوات والمستويات', start: 21, end: 30 },
+  { name: 'التقويم المؤسسي والبرامجي والمفاهيم', start: 31, end: 50 },
+  { name: 'الأهداف والجودة والمعايير والمؤشرات', start: 51, end: 70 },
+  { name: 'مؤشرات الأداء والنماذج والتصميم و CIPP', start: 71, end: 100 },
+];
+
+function getDomain(id) {
+  return domains.find((d) => id >= d.start && id <= d.end) || { name: 'عام' };
+}
+
+function init() {
+  loadProgress();
+  bindEvents();
+  render();
+}
+
+function loadProgress() {
+  try {
+    const raw = localStorage.getItem(LS_KEY);
+    if (raw) {
+      const saved = JSON.parse(raw);
+      if (typeof saved.currentIndex === 'number') state.currentIndex = saved.currentIndex;
+      if (saved.answers && typeof saved.answers === 'object') state.answers = saved.answers;
+      if (saved.submitted) state.submitted = true;
+    }
+  } catch (e) {
+    console.error('Failed to load progress', e);
+  }
+}
+
+function saveProgress() {
+  try {
+    localStorage.setItem(
+      LS_KEY,
+      JSON.stringify({
+        currentIndex: state.currentIndex,
+        answers: state.answers,
+        submitted: state.submitted,
+      })
+    );
+  } catch (e) {
+    console.error('Failed to save progress', e);
+  }
+}
+
+function clearProgress() {
+  try {
+    localStorage.removeItem(LS_KEY);
+  } catch (e) {
+    console.error('Failed to clear progress', e);
+  }
+}
+
+function bindEvents() {
+  document.getElementById('btn-prev').addEventListener('click', goPrev);
+  document.getElementById('btn-next').addEventListener('click', goNext);
+  document.getElementById('btn-review-unanswered').addEventListener('click', jumpToFirstUnanswered);
+  document.getElementById('btn-submit').addEventListener('click', confirmSubmit);
+  document.getElementById('btn-restart').addEventListener('click', restartExam);
+}
+
+function render() {
+  updateProgress();
+  if (state.submitted) {
+    showResults();
+  } else {
+    showExam();
+  }
+}
+
+function showExam() {
+  document.getElementById('exam-screen').classList.remove('hidden');
+  document.getElementById('results-screen').classList.add('hidden');
+  document.getElementById('exam-actions').classList.remove('hidden');
+  document.getElementById('results-actions').classList.add('hidden');
+  document.getElementById('progress-area').classList.remove('hidden');
+
+  renderQuestion();
+  renderQuestionGrid();
+  updateNavButtons();
+}
+
+function renderQuestion() {
+  const q = questions[state.currentIndex];
+  const container = document.getElementById('question-card');
+
+  const selected = state.answers[q.id] || '';
+
+  container.innerHTML = `
+    <div class="question-meta">
+      <span class="question-topic">${escapeHtml(q.topic || '')}</span>
+      <span class="question-difficulty">${escapeHtml(q.difficulty || '')}</span>
+    </div>
+    <h2 class="question-text">${q.id}. ${escapeHtml(q.question)}</h2>
+    <div class="options-list">
+      ${Object.entries(q.options)
+        .map(
+          ([key, text]) => `
+        <label class="option-label" for="opt-${key}">
+          <input
+            type="radio"
+            name="answer"
+            id="opt-${key}"
+            class="option-radio"
+            value="${key}"
+            ${selected === key ? 'checked' : ''}
+          />
+          <span class="option-letter">${OPTION_LABELS[key]}</span>
+          <span class="option-text">${escapeHtml(text)}</span>
+        </label>
+      `
+        )
+        .join('')}
+    </div>
+  `;
+
+  container.querySelectorAll('input[name="answer"]').forEach((radio) => {
+    radio.addEventListener('change', (e) => {
+      state.answers[q.id] = e.target.value;
+      saveProgress();
+      updateProgress();
+      updateGridItem(q.id);
+    });
+  });
+}
+
+function renderQuestionGrid() {
+  const list = document.getElementById('question-grid');
+  list.innerHTML = `
+    <h3 class="question-grid-title">قائمة الأسئلة</h3>
+    <div class="question-grid-list">
+      ${questions
+        .map((q, idx) => {
+          const answered = !!state.answers[q.id];
+          const current = idx === state.currentIndex ? 'current' : '';
+          const status = answered ? 'answered' : 'unanswered';
+          return `<button class="grid-item ${status} ${current}" data-index="${idx}" type="button" aria-label="سؤال ${q.id}">${q.id}</button>`;
+        })
+        .join('')}
+    </div>
+  `;
+
+  list.querySelectorAll('.grid-item').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      state.currentIndex = parseInt(btn.dataset.index, 10);
+      renderQuestion();
+      renderQuestionGrid();
+      updateNavButtons();
+      saveProgress();
+    });
+  });
+}
+
+function updateGridItem(qid) {
+  const idx = questions.findIndex((q) => q.id === qid);
+  if (idx === -1) return;
+  const btn = document.querySelector(`.grid-item[data-index="${idx}"]`);
+  if (!btn) return;
+  btn.classList.remove('unanswered');
+  btn.classList.add('answered');
+}
+
+function updateNavButtons() {
+  const btnPrev = document.getElementById('btn-prev');
+  const btnNext = document.getElementById('btn-next');
+
+  btnPrev.disabled = state.currentIndex === 0;
+  btnNext.textContent = state.currentIndex === totalQuestions - 1 ? 'السؤال الأخير' : 'التالي';
+}
+
+function updateProgress() {
+  const answeredCount = Object.keys(state.answers).length;
+  const percent = Math.round((answeredCount / totalQuestions) * 100);
+  document.getElementById('progress-text').textContent = `تمت الإجابة على ${answeredCount} من ${totalQuestions}`;
+  document.getElementById('progress-percent').textContent = `${percent}%`;
+  document.getElementById('progress-fill').style.width = `${percent}%`;
+}
+
+function goPrev() {
+  if (state.currentIndex > 0) {
+    state.currentIndex--;
+    renderQuestion();
+    renderQuestionGrid();
+    updateNavButtons();
+    saveProgress();
+  }
+}
+
+function goNext() {
+  if (state.currentIndex < totalQuestions - 1) {
+    state.currentIndex++;
+    renderQuestion();
+    renderQuestionGrid();
+    updateNavButtons();
+    saveProgress();
+  }
+}
+
+function jumpToFirstUnanswered() {
+  const first = questions.findIndex((q) => !state.answers[q.id]);
+  if (first !== -1) {
+    state.currentIndex = first;
+    renderQuestion();
+    renderQuestionGrid();
+    updateNavButtons();
+    saveProgress();
+  } else {
+    showModal('جميع الأسئلة مجابة', 'لقد أجبت على جميع الأسئلة. يمكنك تسليم الاختبار الآن.', [
+      { text: 'موافق', class: 'btn btn-primary', action: closeModal },
+    ]);
+  }
+}
+
+function confirmSubmit() {
+  const answeredCount = Object.keys(state.answers).length;
+  const unanswered = totalQuestions - answeredCount;
+
+  if (unanswered > 0) {
+    showModal(
+      'تأكيد التسليم',
+      `لم تجب بعد على ${unanswered} سؤال. هل تريد التسليم على أي حال؟`,
+      [
+        { text: 'إلغاء', class: 'btn btn-secondary', action: closeModal },
+        { text: 'تسليم الاختبار', class: 'btn btn-danger', action: submitExam },
+      ]
+    );
+  } else {
+    submitExam();
+  }
+}
+
+function submitExam() {
+  closeModal();
+  state.submitted = true;
+  saveProgress();
+  render();
+}
+
+function restartExam() {
+  showModal(
+    'إعادة الاختبار',
+    'هل أنت متأكد من مسح جميع إجاباتك والبدء من جديد؟',
+    [
+      { text: 'إلغاء', class: 'btn btn-secondary', action: closeModal },
+      {
+        text: 'إعادة',
+        class: 'btn btn-danger',
+        action: () => {
+          state.currentIndex = 0;
+          state.answers = {};
+          state.submitted = false;
+          clearProgress();
+          closeModal();
+          render();
+        },
+      },
+    ]
+  );
+}
+
+function computeScore() {
+  let correct = 0;
+  questions.forEach((q) => {
+    if (state.answers[q.id] === q.answer) correct++;
+  });
+  const percentage = Math.round((correct / totalQuestions) * 100);
+  return { correct, percentage };
+}
+
+function getGrade(percentage) {
+  if (percentage >= 90) return { label: 'ممتاز', class: 'grade-excellent' };
+  if (percentage >= 80) return { label: 'جيد جدًا', class: 'grade-very-good' };
+  if (percentage >= 70) return { label: 'جيد', class: 'grade-good' };
+  if (percentage >= 60) return { label: 'مقبول', class: 'grade-pass' };
+  return { label: 'يحتاج مراجعة مركزة', class: 'grade-fail' };
+}
+
+function showResults() {
+  document.getElementById('exam-screen').classList.add('hidden');
+  document.getElementById('results-screen').classList.remove('hidden');
+  document.getElementById('exam-actions').classList.add('hidden');
+  document.getElementById('results-actions').classList.remove('hidden');
+  document.getElementById('progress-area').classList.add('hidden');
+
+  const { correct, percentage } = computeScore();
+  const grade = getGrade(percentage);
+
+  document.getElementById('score-card').innerHTML = `
+    <h2 class="score-title">نتيجة الاختبار</h2>
+    <div class="score-value">${correct}/${totalQuestions}</div>
+    <div class="score-detail">النسبة المئوية: ${percentage}%</div>
+    <div class="score-detail">الدرجة: ${grade.label}</div>
+    <span class="grade-badge ${grade.class}">${grade.label}</span>
+  `;
+
+  renderDomainTable(correct);
+  renderReview();
+}
+
+function renderDomainTable() {
+  const rows = domains.map((d) => {
+    const qs = questions.filter((q) => q.id >= d.start && q.id <= d.end);
+    const total = qs.length;
+    const correct = qs.filter((q) => state.answers[q.id] === q.answer).length;
+    const pct = total ? Math.round((correct / total) * 100) : 0;
+    return { ...d, total, correct, pct };
+  });
+
+  document.getElementById('domain-table').innerHTML = `
+    <thead>
+      <tr>
+        <th>المجال</th>
+        <th>عدد الأسئلة</th>
+        <th>الإجابات الصحيحة</th>
+        <th>النسبة المئوية</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${rows
+        .map(
+          (r) => `
+        <tr>
+          <td>${escapeHtml(r.name)}</td>
+          <td>${r.total}</td>
+          <td>${r.correct}</td>
+          <td>${r.pct}%</td>
+        </tr>
+      `
+        )
+        .join('')}
+    </tbody>
+  `;
+}
+
+function renderReview() {
+  const list = document.getElementById('review-list');
+  list.innerHTML = questions
+    .map((q) => {
+      const userAnswer = state.answers[q.id] || '';
+      const isCorrect = userAnswer === q.answer;
+      const statusText = isCorrect ? 'صحيحة' : 'خاطئة';
+      const statusClass = isCorrect ? 'correct' : 'incorrect';
+      const userText = userAnswer ? `${OPTION_LABELS[userAnswer]} - ${escapeHtml(q.options[userAnswer])}` : 'لم يتم الإجابة';
+      const correctText = `${OPTION_LABELS[q.answer]} - ${escapeHtml(q.options[q.answer])}`;
+
+      return `
+        <div class="review-item ${statusClass}">
+          <div class="review-header">
+            <span class="review-question">${q.id}. ${escapeHtml(q.question)}</span>
+            <span class="review-status ${statusClass}">${statusText}</span>
+          </div>
+          <div class="review-answer-row">
+            <div>
+              <span class="review-answer-label">إجابتك:</span>
+              <span class="review-answer-value ${isCorrect ? 'correct' : 'incorrect'}">${userText}</span>
+            </div>
+            <div>
+              <span class="review-answer-label">الإجابة الصحيحة:</span>
+              <span class="review-answer-value correct">${correctText}</span>
+            </div>
+          </div>
+        </div>
+      `;
+    })
+    .join('');
+}
+
+function showModal(title, text, buttons) {
+  closeModal();
+  const overlay = document.createElement('div');
+  overlay.className = 'overlay';
+  overlay.id = 'modal-overlay';
+  overlay.innerHTML = `
+    <div class="modal" role="dialog" aria-modal="true">
+      <h3 class="modal-title">${escapeHtml(title)}</h3>
+      <p class="modal-text">${escapeHtml(text)}</p>
+      <div class="modal-actions">
+        ${buttons
+          .map(
+            (b, i) =>
+              `<button class="${b.class}" data-index="${i}" type="button">${escapeHtml(b.text)}</button>`
+          )
+          .join('')}
+      </div>
+    </div>
+  `;
+
+  overlay.querySelectorAll('button').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const index = parseInt(btn.dataset.index, 10);
+      buttons[index].action();
+    });
+  });
+
+  document.body.appendChild(overlay);
+}
+
+function closeModal() {
+  const overlay = document.getElementById('modal-overlay');
+  if (overlay) overlay.remove();
+}
+
+function escapeHtml(text) {
+  if (text == null) return '';
+  return String(text)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', init);
+} else {
+  init();
+}
